@@ -1,0 +1,373 @@
+@namespace FullCalendarBlazor.Pages
+@using MudBlazor
+@using System.Globalization
+
+<MudContainer MaxWidth="MaxWidth.False" Class="pa-0 calendar-container">
+    @if (ViewType == CalendarViewType.Month)
+    {
+        @MonthCalendarGrid
+    }
+    else if (ViewType == CalendarViewType.Week)
+    {
+        @WeekCalendarGrid
+    }
+    else if (ViewType == CalendarViewType.Day)
+    {
+        @DayCalendarGrid
+    }
+</MudContainer>
+
+@code {
+    [Parameter] public CalendarViewType ViewType { get; set; } = CalendarViewType.Month;
+    [Parameter] public List<CalendarEvent> Events { get; set; } = new();
+    [Parameter] public DateTime CurrentDate { get; set; } = DateTime.Now;
+    [Parameter] public EventCallback<CalendarEventDropArgs> OnEventDrop { get; set; }
+    [Parameter] public EventCallback<CalendarEvent> OnEventEdit { get; set; }
+    [Parameter] public EventCallback<CalendarEvent> OnEventDelete { get; set; }
+
+    private RenderFragment MonthCalendarGrid => @<div class="month-calendar-grid">
+        <div class="calendar-header">
+            @foreach (var dayName in GetDayNames())
+            {
+                <div class="day-header">@dayName</div>
+            }
+        </div>
+        <div class="calendar-body">
+            @{
+                var firstDayOfMonth = new DateTime(CurrentDate.Year, CurrentDate.Month, 1);
+                var lastDayOfMonth = firstDayOfMonth.AddMonths(1).AddDays(-1);
+                var startDate = GetWeekStart(firstDayOfMonth);
+                var endDate = GetWeekEnd(lastDayOfMonth);
+                var totalDays = (endDate - startDate).Days + 1;
+                
+                for (int i = 0; i < totalDays; i++)
+                {
+                    var date = startDate.AddDays(i);
+                    var isCurrentMonth = date.Month == CurrentDate.Month;
+                    var dayEvents = Events.Where(e => e.Start.Date == date.Date).ToList();
+                    
+                    <div class="calendar-day @(isCurrentMonth ? "current-month" : "other-month") @(date.Date == DateTime.Today ? "today" : "")">
+                        <div class="day-number">@date.Day</div>
+                        @foreach (var evt in dayEvents.Take(3))
+                        {
+                            <div class="event-item" style="background-color: @evt.Color; color: white;" 
+                                 @onclick="() => OnEventEdit.InvokeAsync(evt)" 
+                                 title="@evt.Title - @evt.Description">
+                                <span>@evt.Title</span>
+                                <button class="event-delete-btn" @onclick:stopPropagation="true" @onclick="() => OnEventDelete.InvokeAsync(evt)">✕</button>
+                            </div>
+                        }
+                        @if (dayEvents.Count > 3)
+                        {
+                            <div class="more-events">+@(dayEvents.Count - 3) more</div>
+                        }
+                    </div>
+                }
+            }
+        </div>
+    </div>;
+
+    private RenderFragment WeekCalendarGrid => @<div class="week-calendar-grid">
+        <div class="week-header">
+            @{
+                var weekStartDate = GetWeekStart(CurrentDate);
+                for (int i = 0; i < 7; i++)
+                {
+                    var date = weekStartDate.AddDays(i);
+                    <div class="week-day-header @(date.Date == DateTime.Today ? "today" : "")">
+                        <div class="day-name">@date.ToString("ddd")</div>
+                        <div class="day-number">@date.Day</div>
+                    </div>
+                }
+            }
+        </div>
+        <div class="week-body">
+            @{
+                var weekStartForBody = GetWeekStart(CurrentDate);
+                for (int hour = 0; hour < 24; hour++)
+                {
+                    <div class="time-row">
+                        <div class="time-label">@hour.ToString("00"):00</div>
+                        @for (int day = 0; day < 7; day++)
+                        {
+                            var date = weekStartForBody.AddDays(day);
+                            var currentHour = new DateTime(date.Year, date.Month, date.Day, hour, 0, 0);
+                            var nextHour = currentHour.AddHours(1);
+                            
+                            // Find events that overlap with this time slot
+                            var overlappingEvents = Events.Where(e => 
+                                e.Start.Date == date.Date && 
+                                e.Start < nextHour && 
+                                e.End > currentHour).ToList();
+                            
+                            <div class="time-slot" style="position: relative;">
+                                @foreach (var evt in overlappingEvents)
+                                {
+                                    var eventStart = evt.Start < currentHour ? currentHour : evt.Start;
+                                    var eventEnd = evt.End > nextHour ? nextHour : evt.End;
+                                    var durationMinutes = (eventEnd - eventStart).TotalMinutes;
+                                    var heightPercent = (durationMinutes / 60.0) * 100;
+                                    var topOffsetPercent = ((eventStart - currentHour).TotalMinutes / 60.0) * 100;
+                                    
+                                    <div class="event-item" 
+                                         style="background-color: @evt.Color; color: white; position: absolute; top: @(topOffsetPercent)%; height: @(heightPercent)%; width: 95%; left: 2.5%;"
+                                         @onclick="() => OnEventEdit.InvokeAsync(evt)"
+                                         title="@evt.Title - @evt.Description (@evt.Start.ToString("HH:mm") - @evt.End.ToString("HH:mm"))">
+                                        <span style="font-size: 11px; padding: 2px;">@evt.Title</span>
+                                        <button class="event-delete-btn" @onclick:stopPropagation="true" @onclick="() => OnEventDelete.InvokeAsync(evt)">✕</button>
+                                    </div>
+                                }
+                            </div>
+                        }
+                    </div>
+                }
+            }
+        </div>
+    </div>;
+
+    private RenderFragment DayCalendarGrid => @<div class="day-calendar-grid">
+        <div class="day-header">
+            <MudText Typo="Typo.h5">@CurrentDate.ToString("dddd, MMMM d, yyyy")</MudText>
+        </div>
+        <div class="day-body">
+            @{
+                for (int hour = 0; hour < 24; hour++)
+                {
+                    var currentHour = new DateTime(CurrentDate.Year, CurrentDate.Month, CurrentDate.Day, hour, 0, 0);
+                    var nextHour = currentHour.AddHours(1);
+                    
+                    // Find events that overlap with this time slot
+                    var overlappingEvents = Events.Where(e => 
+                        e.Start.Date == CurrentDate.Date && 
+                        e.Start < nextHour && 
+                        e.End > currentHour).ToList();
+                    
+                    <div class="day-time-row">
+                        <div class="time-label">@hour.ToString("00"):00</div>
+                        <div class="time-slot" style="position: relative; min-height: 60px;">
+                            @foreach (var evt in overlappingEvents)
+                            {
+                                var eventStart = evt.Start < currentHour ? currentHour : evt.Start;
+                                var eventEnd = evt.End > nextHour ? nextHour : evt.End;
+                                var durationMinutes = (eventEnd - eventStart).TotalMinutes;
+                                var heightPercent = (durationMinutes / 60.0) * 100;
+                                var topOffsetPercent = ((eventStart - currentHour).TotalMinutes / 60.0) * 100;
+                                
+                                <div class="event-item" 
+                                     style="background-color: @evt.Color; color: white; position: absolute; top: @(topOffsetPercent)%; height: @(heightPercent)%; width: 95%; left: 2.5%;"
+                                     @onclick="() => OnEventEdit.InvokeAsync(evt)"
+                                     title="@evt.Title - @evt.Description (@evt.Start.ToString("HH:mm") - @evt.End.ToString("HH:mm"))">
+                                    <span style="padding: 4px; display: block;">@evt.Title</span>
+                                    <button class="event-delete-btn" @onclick:stopPropagation="true" @onclick="() => OnEventDelete.InvokeAsync(evt)">✕</button>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                }
+            }
+        </div>
+    </div>;
+
+    private string[] GetDayNames()
+    {
+        return new[] { "Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat" };
+    }
+
+    private DateTime GetWeekStart(DateTime date)
+    {
+        var diff = (7 + (date.DayOfWeek - DayOfWeek.Sunday)) % 7;
+        return date.AddDays(-1 * diff).Date;
+    }
+
+    private DateTime GetWeekEnd(DateTime date)
+    {
+        return GetWeekStart(date).AddDays(6);
+    }
+}
+
+<style>
+    .calendar-container {
+        height: 100%;
+        overflow: hidden;
+    }
+
+    /* Month View Styles */
+    .month-calendar-grid {
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+    }
+
+    .calendar-header {
+        display: grid;
+        grid-template-columns: repeat(7, 1fr);
+        border-bottom: 2px solid #ddd;
+        background-color: #f5f5f5;
+    }
+
+    .day-header {
+        padding: 12px;
+        text-align: center;
+        font-weight: bold;
+        border-right: 1px solid #ddd;
+    }
+
+    .calendar-body {
+        display: grid;
+        grid-template-columns: repeat(7, 1fr);
+        grid-auto-rows: minmax(120px, auto);
+        flex: 1;
+        border: 1px solid #ddd;
+    }
+
+    .calendar-day {
+        border: 1px solid #eee;
+        padding: 8px;
+        position: relative;
+        min-height: 120px;
+        overflow: hidden;
+    }
+
+    .calendar-day.current-month {
+        background-color: white;
+    }
+
+    .calendar-day.other-month {
+        background-color: #f9f9f9;
+        color: #ccc;
+    }
+
+    .calendar-day.today {
+        background-color: #e3f2fd;
+    }
+
+    .day-number {
+        font-weight: bold;
+        margin-bottom: 4px;
+    }
+
+    .event-item {
+        font-size: 12px;
+        padding: 2px 6px;
+        margin: 2px 0;
+        border-radius: 3px;
+        cursor: pointer;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        transition: opacity 0.2s;
+    }
+
+    .event-item:hover {
+        opacity: 0.8;
+    }
+
+    .event-delete-btn {
+        background: none;
+        border: none;
+        color: white;
+        cursor: pointer;
+        font-size: 14px;
+        padding: 0 2px;
+        opacity: 0;
+        transition: opacity 0.2s;
+    }
+
+    .event-item:hover .event-delete-btn {
+        opacity: 1;
+    }
+
+    .event-delete-btn:hover {
+        background-color: rgba(255, 255, 255, 0.2);
+        border-radius: 2px;
+    }
+
+    .more-events {
+        font-size: 11px;
+        color: #666;
+        font-style: italic;
+    }
+
+    /* Week View Styles */
+    .week-calendar-grid {
+        display: flex;
+        flex-direction: column;
+        height: 600px;
+    }
+
+    .week-header {
+        display: grid;
+        grid-template-columns: 60px repeat(7, 1fr);
+        border-bottom: 2px solid #ddd;
+        background-color: #f5f5f5;
+    }
+
+    .week-day-header {
+        padding: 12px;
+        text-align: center;
+        border-right: 1px solid #ddd;
+    }
+
+    .week-day-header.today {
+        background-color: #e3f2fd;
+    }
+
+    .day-name {
+        font-weight: bold;
+        font-size: 14px;
+    }
+
+    .week-body {
+        flex: 1;
+        overflow-y: auto;
+    }
+
+    .time-row {
+        display: grid;
+        grid-template-columns: 60px repeat(7, 1fr);
+        min-height: 50px;
+        border-bottom: 1px solid #eee;
+    }
+
+    .time-label {
+        padding: 8px;
+        font-size: 12px;
+        color: #666;
+        border-right: 1px solid #eee;
+        background-color: #f9f9f9;
+    }
+
+    .time-slot {
+        border-right: 1px solid #eee;
+        padding: 4px;
+        position: relative;
+        min-height: 50px;
+    }
+
+    /* Day View Styles */
+    .day-calendar-grid {
+        display: flex;
+        flex-direction: column;
+        height: 600px;
+    }
+
+    .day-header {
+        padding: 16px;
+        border-bottom: 2px solid #ddd;
+        background-color: #f5f5f5;
+        text-align: center;
+    }
+
+    .day-body {
+        flex: 1;
+        overflow-y: auto;
+    }
+
+    .day-time-row {
+        display: grid;
+        grid-template-columns: 80px 1fr;
+        min-height: 60px;
+        border-bottom: 1px solid #eee;
+        position: relative;
+    }
+</style>

@@ -1,0 +1,299 @@
+@page "/fullcalendar"
+@inject ISnackbar Snackbar
+
+@using MudBlazor
+@using FullCalendarBlazor.Pages
+
+<PageTitle>Full Calendar</PageTitle>
+
+<MudPaper Class="pa-4">
+    <MudStack Row Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-4">
+        <MudText Typo="Typo.h4">Full Calendar</MudText>
+        <MudStack Row>
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="OpenAddEventDialog">
+                Add Event
+            </MudButton>
+            <MudButtonGroup>
+                <MudIconButton Icon="@Icons.Material.Filled.ChevronLeft" OnClick="() => NavigateDate(-1)" Title="Previous" />
+                <MudButton Variant="Variant.Text">@GetCurrentDateDisplay()</MudButton>
+                <MudIconButton Icon="@Icons.Material.Filled.ChevronRight" OnClick="() => NavigateDate(1)" Title="Next" />
+            </MudButtonGroup>
+            <MudButton Variant="Variant.Text" OnClick="() => _currentDate = DateTime.Now">Today</MudButton>
+        </MudStack>
+    </MudStack>
+
+    <MudTabs @bind-ActivePanelIndex="_activeTab">
+        <MudTabPanel Text="Month">
+            <CalendarView ViewType="CalendarViewType.Month" Events="Events" CurrentDate="_currentDate"
+                OnEventDrop="OnEventDrop"
+                OnEventEdit="OnEventEdit"
+                OnEventDelete="OnEventDelete" />
+        </MudTabPanel>
+        <MudTabPanel Text="Week">
+            <CalendarView ViewType="CalendarViewType.Week" Events="Events" CurrentDate="_currentDate"
+                OnEventDrop="OnEventDrop"
+                OnEventEdit="OnEventEdit"
+                OnEventDelete="OnEventDelete" />
+        </MudTabPanel>
+        <MudTabPanel Text="Day">
+            <CalendarView ViewType="CalendarViewType.Day" Events="Events" CurrentDate="_currentDate"
+                OnEventDrop="OnEventDrop"
+                OnEventEdit="OnEventEdit"
+                OnEventDelete="OnEventDelete" />
+        </MudTabPanel>
+    </MudTabs>
+</MudPaper>
+
+@* Event Dialog *@
+@if (_showEventDialog)
+{
+    <div class="dialog-backdrop" @onclick="CloseEventDialog">
+        <div class="dialog-container" @onclick:stopPropagation="true">
+            <MudPaper Class="pa-6" Style="min-width: 500px; max-width: 600px; border-radius: 8px;">
+                <MudStack>
+                    <MudText Typo="Typo.h5" Class="mb-4">@(_editingEvent == null ? "Add Event" : "Edit Event")</MudText>
+                    <MudTextField @bind-Value="_eventForm.Title" Label="Title" Variant="Variant.Outlined" Required="true" />
+                    <MudTextField @bind-Value="_eventForm.Description" Label="Description" Lines="3" Variant="Variant.Outlined" />
+                    <MudDatePicker @bind-Date="_eventForm.StartDate" Label="Start Date" Variant="Variant.Outlined" Required="true" />
+                    <MudTextField @bind-Value="_eventForm.StartTime" Label="Start Time" Variant="Variant.Outlined" InputType="InputType.Time" />
+                    <MudDatePicker @bind-Date="_eventForm.EndDate" Label="End Date" Variant="Variant.Outlined" Required="true" />
+                    <MudTextField @bind-Value="_eventForm.EndTime" Label="End Time" Variant="Variant.Outlined" InputType="InputType.Time" />
+                    <MudTextField @bind-Value="_eventForm.Color" Label="Color" Variant="Variant.Outlined" Placeholder="#1976d2" />
+                    <MudSwitch @bind-Value="_eventForm.IsAllDay" Label="All Day Event" Color="Color.Primary" />
+                    <MudStack Row Justify="Justify.FlexEnd" Class="mt-4" Spacing="2">
+                        <MudButton OnClick="CloseEventDialog" Variant="Variant.Text">Cancel</MudButton>
+                        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="SaveEvent" Disabled="@(string.IsNullOrWhiteSpace(_eventForm.Title))">
+                            @(_editingEvent == null ? "Add Event" : "Save Changes")
+                        </MudButton>
+                    </MudStack>
+                </MudStack>
+            </MudPaper>
+        </div>
+    </div>
+}
+
+<style>
+    .dialog-backdrop {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(0, 0, 0, 0.5);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 9999;
+    }
+    
+    .dialog-container {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        min-height: 100vh;
+        padding: 20px;
+    }
+</style>
+
+@code {
+    private int _activeTab = 0;
+    private DateTime _currentDate = DateTime.Now;
+    private bool _showEventDialog = false;
+    private CalendarEvent? _editingEvent = null;
+    private EventForm _eventForm = new();
+
+    private List<CalendarEvent> Events = new()
+    {
+        new CalendarEvent
+        {
+            Title = "Team Meeting",
+            Description = "Weekly team sync",
+            Start = DateTime.Now.AddDays(1).Date.AddHours(9),
+            End = DateTime.Now.AddDays(1).Date.AddHours(10),
+            Color = "#1976d2",
+            IsAllDay = false
+        },
+        new CalendarEvent
+        {
+            Title = "Project Deadline",
+            Description = "Submit final project",
+            Start = DateTime.Now.AddDays(5).Date,
+            End = DateTime.Now.AddDays(5).Date.AddDays(1),
+            Color = "#d32f2f",
+            IsAllDay = true
+        },
+        new CalendarEvent
+        {
+            Title = "Conference",
+            Description = "Tech conference attendance",
+            Start = DateTime.Now.AddDays(-2).Date.AddHours(8),
+            End = DateTime.Now.AddDays(-2).Date.AddHours(17),
+            Color = "#388e3c",
+            IsAllDay = false
+        }
+    };
+
+    private string GetCurrentDateDisplay()
+    {
+        return _activeTab switch
+        {
+            0 => _currentDate.ToString("MMMM yyyy"), // Month
+            1 => $"Week of {GetWeekStart(_currentDate):MMM dd, yyyy}", // Week
+            2 => _currentDate.ToString("MMMM dd, yyyy"), // Day
+            _ => _currentDate.ToString("MMMM yyyy")
+        };
+    }
+
+    private DateTime GetWeekStart(DateTime date)
+    {
+        var diff = (7 + (date.DayOfWeek - DayOfWeek.Sunday)) % 7;
+        return date.AddDays(-1 * diff).Date;
+    }
+
+    private void NavigateDate(int direction)
+    {
+        _currentDate = _activeTab switch
+        {
+            0 => _currentDate.AddMonths(direction), // Month
+            1 => _currentDate.AddDays(7 * direction), // Week
+            2 => _currentDate.AddDays(direction), // Day
+            _ => _currentDate.AddMonths(direction)
+        };
+        StateHasChanged();
+    }
+
+    private void OpenAddEventDialog()
+    {
+        Console.WriteLine("OpenAddEventDialog called"); // Debug line
+        _editingEvent = null;
+        _eventForm = new EventForm
+        {
+            Title = "",
+            Description = "",
+            StartDate = _currentDate.Date,
+            EndDate = _currentDate.Date,
+            StartTime = "09:00",
+            EndTime = "10:00",
+            Color = "#1976d2",
+            IsAllDay = false
+        };
+        _showEventDialog = true;
+        Console.WriteLine($"Dialog visibility set to: {_showEventDialog}"); // Debug line
+        StateHasChanged();
+    }
+
+    private void CloseEventDialog()
+    {
+        _showEventDialog = false;
+        _editingEvent = null;
+        StateHasChanged();
+    }
+
+    private void SaveEvent()
+    {
+        // Validate required fields
+        if (string.IsNullOrWhiteSpace(_eventForm.Title))
+        {
+            Snackbar.Add("Please enter a title for the event", Severity.Warning);
+            return;
+        }
+
+        if (_eventForm.StartDate == null || _eventForm.EndDate == null)
+        {
+            Snackbar.Add("Please select start and end dates", Severity.Warning);
+            return;
+        }
+
+        var startTime = TimeSpan.TryParse(_eventForm.StartTime, out var st) ? st : TimeSpan.FromHours(9);
+        var endTime = TimeSpan.TryParse(_eventForm.EndTime, out var et) ? et : TimeSpan.FromHours(10);
+        
+        // Ensure end time is after start time
+        var startDateTime = _eventForm.StartDate.Value.Add(startTime);
+        var endDateTime = _eventForm.EndDate.Value.Add(endTime);
+        
+        if (endDateTime <= startDateTime)
+        {
+            endDateTime = startDateTime.AddHours(1);
+        }
+
+        var calendarEvent = new CalendarEvent
+        {
+            Title = _eventForm.Title.Trim(),
+            Description = _eventForm.Description?.Trim() ?? "",
+            Start = startDateTime,
+            End = endDateTime,
+            Color = _eventForm.Color?.Trim() ?? "#1976d2",
+            IsAllDay = _eventForm.IsAllDay
+        };
+
+        if (_editingEvent != null)
+        {
+            // Update existing event
+            var index = Events.IndexOf(_editingEvent);
+            if (index >= 0)
+            {
+                Events[index] = calendarEvent;
+                Snackbar.Add("Event updated successfully", Severity.Success);
+            }
+        }
+        else
+        {
+            // Add new event
+            Events.Add(calendarEvent);
+            Snackbar.Add("Event created successfully", Severity.Success);
+        }
+
+        CloseEventDialog();
+        StateHasChanged();
+    }
+
+    private Task OnEventDrop(CalendarEventDropArgs args)
+    {
+        if (args.Event != null)
+        {
+            args.Event.Start = args.NewStart;
+            args.Event.End = args.NewEnd;
+        }
+        StateHasChanged();
+        return Task.CompletedTask;
+    }
+
+    private void OnEventEdit(CalendarEvent evt)
+    {
+        Console.WriteLine("OnEventEdit called"); // Debug line
+        _editingEvent = evt;
+        _eventForm = new EventForm
+        {
+            Title = evt.Title,
+            Description = evt.Description,
+            StartDate = evt.Start.Date,
+            EndDate = evt.End.Date,
+            StartTime = evt.Start.ToString("HH:mm"),
+            EndTime = evt.End.ToString("HH:mm"),
+            Color = evt.Color,
+            IsAllDay = evt.IsAllDay
+        };
+        _showEventDialog = true;
+        Console.WriteLine($"Edit dialog visibility set to: {_showEventDialog}"); // Debug line
+        StateHasChanged();
+    }
+
+    private void OnEventDelete(CalendarEvent evt)
+    {
+        Events.Remove(evt);
+        Snackbar.Add("Event deleted successfully", Severity.Info);
+        StateHasChanged();
+    }
+
+    public class EventForm
+    {
+        public string? Title { get; set; }
+        public string? Description { get; set; }
+        public DateTime? StartDate { get; set; }
+        public DateTime? EndDate { get; set; }
+        public string StartTime { get; set; } = "09:00";
+        public string EndTime { get; set; } = "10:00";
+        public string? Color { get; set; }
+        public bool IsAllDay { get; set; }
+    }
+}

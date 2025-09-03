@@ -1,0 +1,97 @@
+/* Calendar specific styles */
+.calendar-day:hover {
+    background-color: #f8f9fa !important;
+    transform: scale(1.02);
+    transition: all 0.2s ease;
+    cursor: pointer;
+    z-index: 1;
+    position: relative;
+}
+
+.event-item:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    transition: all 0.2s ease;
+}
+
+.week-event:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    transition: all 0.2s ease;
+}
+
+.calendar-header {
+    transition: all 0.2s ease;
+}
+
+.calendar-day {
+    transition: all 0.2s ease;
+}
+
+.week-day:hover {
+    background-color: #fafafa !important;
+    transition: all 0.2s ease;
+}
+
+/* Responsive improvements */
+@media (max-width: 768px) {
+    .calendar-day {
+        min-height: 80px !important;
+        padding: 4px !important;
+    }
+    
+    .event-item {
+        font-size: 9px !important;
+        padding: 1px 2px !important;
+    }
+    
+    .week-day {
+        min-height: 200px !important;
+        padding: 4px !important;
+    }
+    
+    .week-event {
+        font-size: 10px !important;
+        padding: 2px 4px !important;
+    }
+}
+
+/* Animation for new events */
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.event-item, .week-event {
+    animation: fadeInUp 0.3s ease;
+}
+
+/* Better scrolling for mobile */
+.calendar-container {
+    overflow-x: auto;
+}
+
+/* Custom scrollbar for webkit browsers */
+.calendar-container::-webkit-scrollbar {
+    height: 8px;
+}
+
+.calendar-container::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 4px;
+}
+
+.calendar-container::-webkit-scrollbar-thumb {
+    background: #c1c1c1;
+    border-radius: 4px;
+}
+
+.calendar-container::-webkit-scrollbar-thumb:hover {
+    background: #a8a8a8;
+}
